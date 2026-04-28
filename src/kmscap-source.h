@@ -16,31 +16,12 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>
  */
 
+#pragma once
+
 #include <obs-module.h>
-#include <plugin-support.h>
 
-#include "kmscap-source.h"
-
-OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
-
-bool obs_module_load(void)
-{
-	obs_log(LOG_INFO, "plugin loaded successfully (version %s)",
-		PLUGIN_VERSION);
-
-#ifdef __linux__
-	obs_register_source(&kmscap_source_info);
-	obs_log(LOG_INFO, "KMS DMA-BUF screen capture source registered");
-#else
-	obs_log(LOG_WARNING,
-		"obs-kmscap is Linux-only; no sources registered on this platform");
-#endif
-
-	return true;
-}
-
-void obs_module_unload(void)
-{
-	obs_log(LOG_INFO, "plugin unloaded");
-}
+/**
+ * OBS source info struct for the KMS screen capture source.
+ * Register this with obs_register_source() in obs_module_load().
+ */
+extern struct obs_source_info kmscap_source_info;

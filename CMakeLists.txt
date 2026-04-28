@@ -34,6 +34,27 @@ if(ENABLE_QT)
   )
 endif()
 
+# Core sources (all platforms)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.c)
+
+# Linux-only KMS/DMA-BUF capture sources
+if(OS_LINUX)
+  find_package(PkgConfig REQUIRED)
+
+  # libdrm
+  pkg_check_modules(Libdrm REQUIRED IMPORTED_TARGET libdrm)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE PkgConfig::Libdrm)
+
+  # EGL (for gs_texture_create_from_dmabuf internals — headers only needed
+  # for drm_fourcc.h which ships with libdrm)
+  target_sources(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE
+      src/kms-utils.c
+      src/kmscap-source.c
+  )
+
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE OS_LINUX)
+endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
