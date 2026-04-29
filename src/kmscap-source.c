@@ -528,13 +528,11 @@ static obs_properties_t *kmscap_get_properties(void *data)
 		obs_module_text("KMSCapture.DRICard"),
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 
-	for (int i = 0;; i++) {
+	for (int i = 0; i < 16; i++) {
 		char path[32];
 		snprintf(path, sizeof(path), "/dev/dri/card%d", i);
 		if (access(path, F_OK) == 0)
 			obs_property_list_add_string(card_list, path, path);
-		else
-			break;
 	}
 
 	obs_property_set_modified_callback(card_list, kmscap_card_changed);
