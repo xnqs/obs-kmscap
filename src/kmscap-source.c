@@ -18,6 +18,7 @@
 
 #include "kmscap-source.h"
 #include "kms-utils.h"
+#include "kms-ipc.h"
 
 #include <obs-module.h>
 #include <graphics/graphics.h>
@@ -39,8 +40,9 @@ typedef struct {
 	char    dri_path[64]; /* e.g. /dev/dri/card1              */
 	uint32_t crtc_id;     /* selected CRTC (0 = first active) */
 
-	/* DRM device */
-	int drm_fd;
+	/* IPC to helper daemon */
+	int ipc_fd;
+	pid_t helper_pid;
 
 	/* Current capture state */
 	uint32_t     fb_id;   /* last known scanout FB id         */
@@ -104,22 +106,12 @@ static void kmscap_destroy_texture(kmscap_ctx_t *ctx)
 	ctx->cursor_fb_id = 0;
 }
 
-/**
- * Query the CRTC for its current scanout FB id.
- * Returns 0 on failure or if the CRTC has no active framebuffer.
- */
 static uint32_t kmscap_get_current_fb_id(kmscap_ctx_t *ctx)
 {
-	if (ctx->drm_fd < 0 || ctx->crtc_id == 0)
+	if (ctx->ipc_fd < 0 || ctx->crtc_id == 0)
 		return 0;
 
-	drmModeCrtcPtr crtc = drmModeGetCrtc(ctx->drm_fd, ctx->crtc_id);
-	if (!crtc)
-		return 0;
-
-	uint32_t fb_id = crtc->buffer_id;
-	drmModeFreeCrtc(crtc);
-	return fb_id;
+	return ipc_kms_get_current_fb_id(ctx->ipc_fd, ctx->crtc_id);
 }
 
 /**
@@ -143,17 +135,10 @@ static bool kmscap_import_fb(kmscap_ctx_t *ctx)
 	kmscap_destroy_texture(ctx);
 	ctx->fb_id = fb_id;
 
-	if (!kms_get_fb2(ctx->drm_fd, fb_id, &ctx->fb)) {
+	if (!ipc_kms_get_fb2_and_fds(ctx->ipc_fd, fb_id, &ctx->fb)) {
 		blog(LOG_ERROR,
-		     "[kmscap] Failed to get FB2 for fb_id=%u", fb_id);
-		return false;
-	}
-
-	if (!kms_export_dmabuf_fds(ctx->drm_fd, &ctx->fb)) {
-		blog(LOG_ERROR,
-		     "[kmscap] Failed to export DMA-BUF fds for fb_id=%u",
+		     "[kmscap] Failed to get FB2 and FDs for fb_id=%u via helper",
 		     fb_id);
-		kms_release_fb_fds(&ctx->fb);
 		return false;
 	}
 
@@ -214,7 +199,7 @@ static bool kmscap_import_cursor_fb(kmscap_ctx_t *ctx)
 
 	uint32_t fb_id = 0;
 	int cx = 0, cy = 0;
-	if (!kms_get_plane_fb(ctx->drm_fd, ctx->cursor_plane_id, &fb_id, &cx, &cy))
+	if (!ipc_kms_get_plane_fb(ctx->ipc_fd, ctx->cursor_plane_id, &fb_id, &cx, &cy))
 		return false;
 
 	ctx->cursor_x = cx;
@@ -235,11 +220,8 @@ static bool kmscap_import_cursor_fb(kmscap_ctx_t *ctx)
 	kms_release_fb_fds(&ctx->cursor_fb);
 	ctx->cursor_fb_id = fb_id;
 
-	if (!kms_get_fb2(ctx->drm_fd, fb_id, &ctx->cursor_fb))
-		return false;
-
-	if (!kms_export_dmabuf_fds(ctx->drm_fd, &ctx->cursor_fb)) {
-		kms_release_fb_fds(&ctx->cursor_fb);
+	if (!ipc_kms_get_fb2_and_fds(ctx->ipc_fd, fb_id, &ctx->cursor_fb)) {
+		blog(LOG_ERROR, "[kmscap] Failed to get cursor FB and FDs");
 		return false;
 	}
 
@@ -282,7 +264,7 @@ static bool kmscap_import_cursor_fb(kmscap_ctx_t *ctx)
 static uint32_t kmscap_resolve_crtc(kmscap_ctx_t *ctx)
 {
 	kms_crtc_info_t crtcs[KMS_MAX_CRTCS];
-	int n = kms_enumerate_crtcs(ctx->drm_fd, crtcs, KMS_MAX_CRTCS);
+	int n = ipc_kms_enumerate_crtcs(ctx->ipc_fd, crtcs, KMS_MAX_CRTCS);
 	if (n <= 0) {
 		blog(LOG_ERROR, "[kmscap] No active CRTCs found on %s",
 		     ctx->dri_path);
@@ -310,21 +292,22 @@ static uint32_t kmscap_resolve_crtc(kmscap_ctx_t *ctx)
 
 static bool kmscap_open(kmscap_ctx_t *ctx)
 {
-	ctx->drm_fd = kms_open_device(ctx->dri_path);
-	if (ctx->drm_fd < 0)
+	ctx->ipc_fd = ipc_kms_open_device(ctx->dri_path, &ctx->helper_pid);
+	if (ctx->ipc_fd < 0)
 		return false;
 
 	ctx->crtc_id = kmscap_resolve_crtc(ctx);
 	if (ctx->crtc_id == 0) {
-		kms_close_device(ctx->drm_fd);
-		ctx->drm_fd = -1;
+		ipc_kms_close_device(ctx->ipc_fd, ctx->helper_pid);
+		ctx->ipc_fd = -1;
+		ctx->helper_pid = 0;
 		return false;
 	}
 
 	blog(LOG_INFO, "[kmscap] Opened %s, using CRTC %u",
 	     ctx->dri_path, ctx->crtc_id);
 
-	ctx->cursor_plane_id = kms_find_cursor_plane(ctx->drm_fd, ctx->crtc_id);
+	ctx->cursor_plane_id = ipc_kms_find_cursor_plane(ctx->ipc_fd, ctx->crtc_id);
 
 	kmscap_import_cursor_fb(ctx);
 
@@ -334,8 +317,9 @@ static bool kmscap_open(kmscap_ctx_t *ctx)
 static void kmscap_close(kmscap_ctx_t *ctx)
 {
 	kmscap_destroy_texture(ctx);
-	kms_close_device(ctx->drm_fd);
-	ctx->drm_fd  = -1;
+	ipc_kms_close_device(ctx->ipc_fd, ctx->helper_pid);
+	ctx->ipc_fd  = -1;
+	ctx->helper_pid = 0;
 	ctx->crtc_id = 0;
 }
 
@@ -353,7 +337,8 @@ static void *kmscap_create(obs_data_t *settings, obs_source_t *source)
 {
 	kmscap_ctx_t *ctx = bzalloc(sizeof(*ctx));
 	ctx->source = source;
-	ctx->drm_fd = -1;
+	ctx->ipc_fd = -1;
+	ctx->helper_pid = 0;
 	for (int i = 0; i < KMS_MAX_PLANES; i++) {
 		ctx->fb.fds[i] = -1;
 		ctx->cursor_fb.fds[i] = -1;
@@ -400,7 +385,7 @@ static void kmscap_video_tick(void *data, float seconds)
 	UNUSED_PARAMETER(seconds);
 	kmscap_ctx_t *ctx = data;
 
-	if (ctx->drm_fd < 0)
+	if (ctx->ipc_fd < 0)
 		return;
 
 	if (!obs_source_showing(ctx->source))
@@ -468,7 +453,7 @@ static void kmscap_update(void *data, obs_data_t *settings)
 
 	ctx->capture_cursor = obs_data_get_bool(settings, PROP_CAPTURE_CURSOR);
 
-	if (card_changed || crtc_changed || ctx->drm_fd < 0) {
+	if (card_changed || crtc_changed || ctx->ipc_fd < 0) {
 		kmscap_close(ctx);
 		snprintf(ctx->dri_path, sizeof(ctx->dri_path), "%s",
 			 (card && *card) ? card : "/dev/dri/card1");
@@ -494,15 +479,16 @@ static bool kmscap_card_changed(obs_properties_t *props, obs_property_t *p,
 	obs_property_t *crtc_list = obs_properties_get(props, PROP_CRTC_ID);
 	obs_property_list_clear(crtc_list);
 
-	int fd = kms_open_device((card && *card) ? card : "/dev/dri/card1");
+	pid_t hpid = 0;
+	int fd = ipc_kms_open_device((card && *card) ? card : "/dev/dri/card1", &hpid);
 	if (fd < 0) {
 		obs_property_set_enabled(crtc_list, false);
 		return true;
 	}
 
 	kms_crtc_info_t crtcs[KMS_MAX_CRTCS];
-	int n = kms_enumerate_crtcs(fd, crtcs, KMS_MAX_CRTCS);
-	kms_close_device(fd);
+	int n = ipc_kms_enumerate_crtcs(fd, crtcs, KMS_MAX_CRTCS);
+	ipc_kms_close_device(fd, hpid);
 
 	obs_property_set_enabled(crtc_list, n > 0);
 	for (int i = 0; i < n; i++) {
@@ -549,11 +535,12 @@ static obs_properties_t *kmscap_get_properties(void *data)
 
 	/* Populate CRTC list for the currently selected (or default) card. */
 	const char *cur_card = ctx ? ctx->dri_path : "/dev/dri/card1";
-	int dfd = kms_open_device(cur_card);
+	pid_t hpid = 0;
+	int dfd = ipc_kms_open_device(cur_card, &hpid);
 	if (dfd >= 0) {
 		kms_crtc_info_t crtcs[KMS_MAX_CRTCS];
-		int n = kms_enumerate_crtcs(dfd, crtcs, KMS_MAX_CRTCS);
-		kms_close_device(dfd);
+		int n = ipc_kms_enumerate_crtcs(dfd, crtcs, KMS_MAX_CRTCS);
+		ipc_kms_close_device(dfd, hpid);
 
 		if (n <= 0) {
 			obs_property_list_add_int(

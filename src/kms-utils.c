@@ -18,8 +18,17 @@
 
 #include "kms-utils.h"
 
+#ifdef KMSCAP_HELPER_DAEMON
+#include <stdio.h>
+#define LOG_ERROR 1
+#define LOG_WARNING 2
+#define LOG_INFO 3
+#define LOG_DEBUG 4
+#define blog(level, format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
+#else
 #include <obs-module.h>
 #include <graphics/graphics.h>
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -405,6 +414,7 @@ void kms_release_fb_fds(kms_fb_t *fb)
 /* Format mapping                                                            */
 /* ---------------------------------------------------------------------- */
 
+#ifndef KMSCAP_HELPER_DAEMON
 int kms_fourcc_to_gs_format(uint32_t fourcc)
 {
 	/*
@@ -432,3 +442,4 @@ int kms_fourcc_to_gs_format(uint32_t fourcc)
 		return GS_BGRA;
 	}
 }
+#endif

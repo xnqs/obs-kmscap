@@ -51,8 +51,15 @@ if(OS_LINUX)
     ${CMAKE_PROJECT_NAME}
     PRIVATE
       src/kms-utils.c
+      src/kms-ipc.c
       src/kmscap-source.c
   )
+
+  # Build the privileged helper daemon
+  add_executable(obs-kmscap-helper src/kmscap-helper.c src/kms-utils.c src/kms-ipc.c)
+  target_link_libraries(obs-kmscap-helper PRIVATE PkgConfig::Libdrm)
+  target_compile_definitions(obs-kmscap-helper PRIVATE OS_LINUX KMSCAP_HELPER_DAEMON)
+  install(TARGETS obs-kmscap-helper DESTINATION bin)
 
   target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE OS_LINUX)
 endif()

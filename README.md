@@ -34,13 +34,12 @@ sudo cmake --install build_x86_64
 ---
 
 ## Setting Linux Capabilities
-Because the Linux kernel isolates GPU memory framebuffers by their allocator processes (typically your Wayland/X11 display server), regular applications are blocked from intercepting the handles needed to read them. You must grant the OBS binary the system privileges to read these handles:
+Because the Linux kernel isolates GPU memory framebuffers by their allocator processes (typically your Wayland/X11 display server), regular applications are blocked from intercepting the handles needed to read them. You must grant the helper binary the system privileges to read these handles:
 
 ```bash
-# Grant the capability to the active OBS executable
-sudo setcap cap_sys_admin+ep $(which obs)
+# Grant the capability to the helper binary
+sudo setcap cap_sys_admin+ep $(which obs-kmscap-helper)
 ```
-*(If your respective distribution named the OBS binary something else like `obs-studio`, use that instead).*
 
 ---
 
@@ -56,4 +55,4 @@ Once installed and provisioned:
 
 ## Limitations & Known Issues
 * **NVIDIA Proprietary Drivers**: Standard DRM/KMS features can be spotty on proprietary NVIDIA stacks depending on the specific branch. You **must** forcibly enable KMS by passing `nvidia-drm.modeset=1` as a kernel boot parameter.
-* **Security Implications**: Because you must run OBS with the `CAP_SYS_ADMIN` capability (which essentially grants administrative system boundaries to OBS routines), please exercise high caution regarding any *other* unverified third-party plugins installed simultaneously in your OBS instance.
+* **Security Implications**: Because the plugin runs the helper binary with the `CAP_SYS_ADMIN` capability (which essentially grants administrative system boundaries to the binary), please take note of the potential security implications, of any user on your system being able to capture any screen on your system.
