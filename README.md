@@ -18,6 +18,12 @@ To use this plugin, your system **MUST** effectively meet the following strict r
 
 ## Building and Installation
 
+### Arch-based distributions
+
+If you are on an Arch-based distribution, you can use the AUR package [obs-kmscap-git](https://aur.archlinux.org/packages/obs-kmscap-git).
+
+### Standard building and installation
+
 This is a standard CMake project. To build and install the plugin from source globally into `/usr`:
 
 ```bash
