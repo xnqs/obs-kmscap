@@ -1,0 +1,56 @@
+/*
+ * obs-kmscap - NV12 YUV-to-RGB conversion effect
+ *
+ * Converts a two-plane NV12 DMA-BUF into RGB for display.
+ *   image    – Y plane  (GS_R8,    width  x height)
+ *   image_uv – UV plane (GS_R8G8,  width/2 x height/2)
+ *
+ * The color_matrix uniform is a row-major 4x4 that maps [Y, Cb, Cr, 1] to
+ * [R, G, B, 1].  Pre-built matrices for BT.601 and BT.709 are set from C.
+ *
+ * OBS shader dialect: HLSL-like (compiled via libobs cross-compiler).
+ */
+
+uniform float4x4 color_matrix;
+
+uniform texture2d image;    /* Y  plane */
+uniform texture2d image_uv; /* UV plane */
+
+sampler_state texSampler {
+	Filter   = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData v_out;
+	v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	v_out.uv  = v_in.uv;
+	return v_out;
+}
+
+float4 PSConvertNV12(VertData v_in) : TARGET
+{
+	float  y  = image.Sample(texSampler, v_in.uv).r;
+	float2 uv = image_uv.Sample(texSampler, v_in.uv).rg;
+
+	/* color_matrix maps [Y, Cb, Cr, 1] → [R, G, B, A] */
+	float4 yuv1 = float4(y, uv.x, uv.y, 1.0);
+	float4 rgba = mul(color_matrix, yuv1);
+	return float4(clamp(rgba.rgb, 0.0, 1.0), 1.0);
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSConvertNV12(v_in);
+	}
+}

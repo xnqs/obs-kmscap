@@ -55,6 +55,11 @@ if(OS_LINUX)
       src/kmscap-source.c
   )
 
+  # Install the NV12 conversion effect alongside the plugin data
+  set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+    OBS_MODULE_INSTALL_DATA "${CMAKE_CURRENT_SOURCE_DIR}/data"
+  )
+
   # Build the privileged helper daemon
   add_executable(obs-kmscap-helper src/kmscap-helper.c src/kms-utils.c src/kms-ipc.c)
   target_link_libraries(obs-kmscap-helper PRIVATE PkgConfig::Libdrm)
