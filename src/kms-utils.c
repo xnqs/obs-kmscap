@@ -37,10 +37,6 @@
 #include <unistd.h>
 #include <drm/drm_fourcc.h>
 
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
-#endif
-
 /* ---------------------------------------------------------------------- */
 /* Device open/close                                                        */
 /* ---------------------------------------------------------------------- */

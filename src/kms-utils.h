@@ -22,6 +22,15 @@
 #include <stdbool.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <drm/drm_fourcc.h>
+
+#ifndef DRM_FORMAT_MOD_INVALID
+#define DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
+#endif
+
+#ifndef DRM_MODE_FB_MODIFIERS
+#define DRM_MODE_FB_MODIFIERS 2
+#endif
 
 /* Maximum number of planes in a framebuffer (DRM_FORMAT_MAX_PLANES = 4) */
 #define KMS_MAX_PLANES 4

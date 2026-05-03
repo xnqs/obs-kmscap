@@ -157,12 +157,16 @@ static bool kmscap_import_fb(kmscap_ctx_t *ctx)
 		modifiers[i] = ctx->fb.modifiers[i];
 	}
 
+	bool has_modifiers = (ctx->fb.flags & DRM_MODE_FB_MODIFIERS) != 0;
+	if (has_modifiers && modifiers[0] == DRM_FORMAT_MOD_INVALID)
+		has_modifiers = false;
+
 	obs_enter_graphics();
 	ctx->texture = gs_texture_create_from_dmabuf(
 		ctx->fb.width, ctx->fb.height,
 		ctx->fb.fourcc,
 		(enum gs_color_format)gs_fmt,
-		n, fds, strides, offsets, modifiers);
+		n, fds, strides, offsets, has_modifiers ? modifiers : NULL);
 	obs_leave_graphics();
 
 	if (!ctx->texture) {
@@ -239,12 +243,16 @@ static bool kmscap_import_cursor_fb(kmscap_ctx_t *ctx)
 		modifiers[i] = ctx->cursor_fb.modifiers[i];
 	}
 
+	bool has_modifiers = (ctx->cursor_fb.flags & DRM_MODE_FB_MODIFIERS) != 0;
+	if (has_modifiers && modifiers[0] == DRM_FORMAT_MOD_INVALID)
+		has_modifiers = false;
+
 	obs_enter_graphics();
 	ctx->cursor_texture = gs_texture_create_from_dmabuf(
 		ctx->cursor_fb.width, ctx->cursor_fb.height,
 		ctx->cursor_fb.fourcc,
 		(enum gs_color_format)gs_fmt,
-		n, fds, strides, offsets, modifiers);
+		n, fds, strides, offsets, has_modifiers ? modifiers : NULL);
 	obs_leave_graphics();
 
 	if (!ctx->cursor_texture) {
