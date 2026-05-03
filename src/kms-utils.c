@@ -285,15 +285,29 @@ bool kms_get_fb2(int fd, uint32_t fb_id, kms_fb_t *out)
 		out->height  = old_fb->height;
 		out->flags   = 0;
 
-		/* Infer a basic fourcc since legacy GETFB only returns depth/bpp */
-		if (old_fb->depth == 24 && old_fb->bpp == 32)
-			out->fourcc = DRM_FORMAT_XRGB8888;
-		else if (old_fb->depth == 32 && old_fb->bpp == 32)
-			out->fourcc = DRM_FORMAT_ARGB8888;
-		else if (old_fb->depth == 16 && old_fb->bpp == 16)
-			out->fourcc = DRM_FORMAT_RGB565;
-		else
+		/* Infer fourcc since legacy GETFB only returns depth/bpp */
+		switch (old_fb->bpp) {
+		case 8:
+			out->fourcc = DRM_FORMAT_C8;
+			break;
+		case 16:
+			out->fourcc = (old_fb->depth == 15) ? DRM_FORMAT_XRGB1555 : DRM_FORMAT_RGB565;
+			break;
+		case 24:
+			out->fourcc = DRM_FORMAT_RGB888;
+			break;
+		case 32:
+			if (old_fb->depth == 24)
+				out->fourcc = DRM_FORMAT_XRGB8888;
+			else if (old_fb->depth == 30)
+				out->fourcc = DRM_FORMAT_XRGB2101010;
+			else
+				out->fourcc = DRM_FORMAT_ARGB8888;
+			break;
+		default:
 			out->fourcc = DRM_FORMAT_XRGB8888; /* fallback */
+			break;
+		}
 
 		out->num_planes = 1;
 		out->handles[0]   = old_fb->handle;
@@ -427,6 +441,9 @@ int kms_fourcc_to_gs_format(uint32_t fourcc)
 		return GS_RGBA;
 	case DRM_FORMAT_XBGR8888:
 		return GS_RGBA; /* closest available */
+	case DRM_FORMAT_XRGB2101010:
+	case DRM_FORMAT_ARGB2101010:
+		return GS_R10G10B10A2;
 	default:
 		/* RGB565 and other formats not in gs_color_format — pass the
 		 * DRM fourcc directly to EGL and use GS_BGRA as a hint. */
