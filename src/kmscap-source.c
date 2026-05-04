@@ -308,6 +308,20 @@ static bool kmscap_import_fb(kmscap_ctx_t *ctx)
 		ctx->fb.fourcc,
 		(enum gs_color_format)gs_fmt,
 		n, ctx->fb.fds, ctx->fb.pitches, ctx->fb.offsets, mods);
+
+	/* Fallback: if explicit modifiers were rejected (common on AMD Polaris
+	 * where the kernel may report modifiers that Mesa EGL can't import),
+	 * retry with implicit modifiers (NULL). */
+	if (!ctx->texture && mods != NULL) {
+		blog(LOG_WARNING,
+		     "[kmscap] Explicit modifier import failed for fb_id=%u, "
+		     "retrying with implicit modifiers", fb_id);
+		ctx->texture = gs_texture_create_from_dmabuf(
+			ctx->fb.width, ctx->fb.height,
+			ctx->fb.fourcc,
+			(enum gs_color_format)gs_fmt,
+			n, ctx->fb.fds, ctx->fb.pitches, ctx->fb.offsets, NULL);
+	}
 	obs_leave_graphics();
 
 	if (!ctx->texture) {
