@@ -104,6 +104,15 @@ int kms_enumerate_crtcs(int fd, kms_crtc_info_t *out, int max_out);
 uint32_t kms_find_cursor_plane(int fd, uint32_t crtc_id);
 
 /**
+ * Find the Plane ID of the primary plane associated with this CRTC.
+ * 
+ * @param fd      Open DRM device fd.
+ * @param crtc_id Target CRTC ID to map to.
+ * @return        Plane ID of the primary plane, or 0 if not found.
+ */
+uint32_t kms_find_primary_plane(int fd, uint32_t crtc_id);
+
+/**
  * Retrieve current framebuffer ID and position of a specific plane.
  * 
  * @param fd       Open DRM device fd.

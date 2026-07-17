@@ -162,7 +162,7 @@ int kms_enumerate_crtcs(int fd, kms_crtc_info_t *out, int max_out)
 /* DRM Plane helpers                                                        */
 /* ---------------------------------------------------------------------- */
 
-uint32_t kms_find_cursor_plane(int fd, uint32_t crtc_id)
+static uint32_t kms_find_plane_by_type(int fd, uint32_t crtc_id, uint64_t type)
 {
 	drmModeResPtr res = drmModeGetResources(fd);
 	if (!res) return 0;
@@ -180,14 +180,14 @@ uint32_t kms_find_cursor_plane(int fd, uint32_t crtc_id)
 	drmModePlaneResPtr p_res = drmModeGetPlaneResources(fd);
 	if (!p_res) return 0;
 
-	uint32_t cursor_plane = 0;
+	uint32_t found_plane = 0;
 
 	for (uint32_t i = 0; i < p_res->count_planes; i++) {
 		drmModePlanePtr p = drmModeGetPlane(fd, p_res->planes[i]);
 		if (!p) continue;
 
 		if (p->possible_crtcs & (1 << crtc_index)) {
-			/* Check if it's a cursor plane */
+			/* Check if it's the requested plane type */
 			drmModeObjectPropertiesPtr props = 
 				drmModeObjectGetProperties(fd, p->plane_id, DRM_MODE_OBJECT_PLANE);
 			if (props) {
@@ -195,23 +195,33 @@ uint32_t kms_find_cursor_plane(int fd, uint32_t crtc_id)
 					drmModePropertyPtr prop = drmModeGetProperty(fd, props->props[j]);
 					if (prop) {
 						if (strcmp(prop->name, "type") == 0) {
-							if (props->prop_values[j] == DRM_PLANE_TYPE_CURSOR) {
-								cursor_plane = p->plane_id;
+							if (props->prop_values[j] == type) {
+								found_plane = p->plane_id;
 							}
 						}
 						drmModeFreeProperty(prop);
 					}
-					if (cursor_plane) break;
+					if (found_plane) break;
 				}
 				drmModeFreeObjectProperties(props);
 			}
 		}
 		drmModeFreePlane(p);
-		if (cursor_plane) break;
+		if (found_plane) break;
 	}
 
 	drmModeFreePlaneResources(p_res);
-	return cursor_plane;
+	return found_plane;
+}
+
+uint32_t kms_find_cursor_plane(int fd, uint32_t crtc_id)
+{
+	return kms_find_plane_by_type(fd, crtc_id, DRM_PLANE_TYPE_CURSOR);
+}
+
+uint32_t kms_find_primary_plane(int fd, uint32_t crtc_id)
+{
+	return kms_find_plane_by_type(fd, crtc_id, DRM_PLANE_TYPE_PRIMARY);
 }
 
 bool kms_get_plane_fb(int fd, uint32_t plane_id, uint32_t *fb_id, int *x, int *y) {

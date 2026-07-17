@@ -53,13 +53,19 @@ static void handle_request(int ipc_fd, const struct kms_req *req)
 		if (g_drm_fd < 0) {
 			resp.status = -1;
 		} else {
-			drmModeCrtcPtr crtc = drmModeGetCrtc(g_drm_fd, req->crtc_id);
-			if (crtc) {
-				resp.fb_id = crtc->buffer_id;
-				drmModeFreeCrtc(crtc);
+			uint32_t primary_plane = kms_find_primary_plane(g_drm_fd, req->crtc_id);
+			uint32_t fb_id = 0;
+			if (primary_plane && kms_get_plane_fb(g_drm_fd, primary_plane, &fb_id, NULL, NULL) && fb_id != 0) {
+				resp.fb_id = fb_id;
 			} else {
-				resp.fb_id = 0;
-				resp.status = -1;
+				drmModeCrtcPtr crtc = drmModeGetCrtc(g_drm_fd, req->crtc_id);
+				if (crtc) {
+					resp.fb_id = crtc->buffer_id;
+					drmModeFreeCrtc(crtc);
+				} else {
+					resp.fb_id = 0;
+					resp.status = -1;
+				}
 			}
 		}
 		ipc_send_resp(ipc_fd, &resp, NULL, 0);
